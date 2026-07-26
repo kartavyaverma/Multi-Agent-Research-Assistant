@@ -26,9 +26,6 @@ from app.agents.state import ResearchState
 from app.agents.tools import web_search
 from app.config import settings
 
-# Lazily instantiated so importing this module (e.g. in tests that mock the
-# LLM calls entirely) never requires an OPENAI_API_KEY to be set. Real key
-# is only needed the first time a node actually invokes a model.
 _cheap_llm = None
 _strong_llm = None
 
@@ -51,9 +48,6 @@ def get_strong_llm() -> ChatOpenAI:
     return _strong_llm
 
 
-# ---------------------------------------------------------------------------
-# Node: Researcher
-# ---------------------------------------------------------------------------
 def researcher_node(state: ResearchState) -> ResearchState:
     query = state["question"]
     results = web_search.invoke(query)
@@ -67,9 +61,6 @@ def researcher_node(state: ResearchState) -> ResearchState:
     }
 
 
-# ---------------------------------------------------------------------------
-# Node: Drafter
-# ---------------------------------------------------------------------------
 DRAFT_PROMPT = """You are a research assistant. Using ONLY the search results
 below, write a concise, factual draft answer to the question. If the search
 results don't contain enough information, say so explicitly rather than
@@ -107,9 +98,6 @@ def drafter_node(state: ResearchState) -> ResearchState:
     }
 
 
-# ---------------------------------------------------------------------------
-# Node: Fact-checker
-# ---------------------------------------------------------------------------
 FACT_CHECK_PROMPT = """You are a strict fact-checker. Compare the draft answer
 against the search results it was based on. Flag any claim in the draft that
 is NOT supported by the search results (possible hallucination).
@@ -155,9 +143,6 @@ def route_after_fact_check(state: ResearchState) -> Literal["drafter", "summariz
     return "drafter"
 
 
-# ---------------------------------------------------------------------------
-# Node: Summarizer (escalates to the stronger model)
-# ---------------------------------------------------------------------------
 SUMMARY_PROMPT = """You are producing the final answer for a user. Polish the
 draft below into a clear, well-organized answer. Add a short "Sources"
 section at the end listing the source URLs provided.
@@ -187,9 +172,6 @@ def summarizer_node(state: ResearchState) -> ResearchState:
     }
 
 
-# ---------------------------------------------------------------------------
-# Graph assembly
-# ---------------------------------------------------------------------------
 def build_graph():
     graph = StateGraph(ResearchState)
 

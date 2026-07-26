@@ -27,7 +27,6 @@ def trace_research_run(question: str):
     """Context manager that opens a Langfuse trace for one end-to-end
     research request and always closes/flushes it, even on error."""
     if _langfuse_client is None:
-        # Tracing disabled (e.g. local dev without keys) -- no-op.
         yield None
         return
 

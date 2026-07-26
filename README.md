@@ -1,229 +1,158 @@
 # Multi-Agent Research Assistant
 
-A multi-agent research pipeline built with **LangGraph**, served via **FastAPI**,
-with **Langfuse** tracing and **Ragas** evaluation. Environment managed with
-**uv**.
+A multi-agent research pipeline that answers a question by having four
+specialized agents divide the work — search, draft, fact-check, and
+summarize — instead of relying on a single LLM call. Built with
+**LangGraph**, served via **FastAPI**, with a **Streamlit** UI, **Langfuse**
+tracing, and **Ragas** evaluation.
+
+```
+Question → Researcher → Drafter → Fact-checker → Summarizer → Answer
+              (search)   (draft)     ↑    ↓        (polish +
+                                retry once           citations)
+                                if unsupported
+                                claims found
+```
+
+## Why this exists
+
+Most RAG demos are a single prompt: retrieve → stuff into context → generate.
+This project is deliberately built as a **multi-agent system with
+verification and correction as first-class steps**, plus the operational
+concerns that matter once "does it answer the question" isn't the only bar:
+
+- **Correctness**: a fact-checker agent compares the draft against retrieved
+  sources and can send it back for one revision before it reaches the user.
+- **Cost**: cheap model (`gpt-4o-mini`) handles research and fact-checking;
+  the expensive model (`gpt-4o`) is only used once, for final synthesis.
+- **Observability**: every agent step is traced (input, output, latency,
+  cost) via Langfuse — not just "it returned 200 OK."
+- **Measured quality**: Ragas scores every answer for faithfulness (is it
+  grounded in the retrieved sources?) and relevancy, so quality can be
+  tracked over time instead of eyeballed.
+
+## Results
+
+Evaluated on a held-out set of research questions using
+[Ragas](https://github.com/explodinggradients/ragas):
+
+| Metric | Score |
+|---|---|
+| Faithfulness | **0.99** |
+| Answer Relevancy | **0.98** |
+
+(Faithfulness measures whether every claim in the final answer is
+traceable to the retrieved search results — i.e. how much the pipeline
+avoids hallucinating.)
 
 ## Architecture
 
+| Agent | Model | Job |
+|---|---|---|
+| **Researcher** | — | Searches the web via [Tavily](https://tavily.com) for current, relevant sources |
+| **Drafter** | `gpt-4o-mini` | Writes an answer grounded *only* in the retrieved results |
+| **Fact-checker** | `gpt-4o-mini` | Flags unsupported claims; sends the draft back for one revision if needed |
+| **Summarizer** | `gpt-4o` | Polishes the final answer and adds citations |
+
+The retry loop is **bounded** (`MAX_AGENT_ITERATIONS` in config) — if the
+fact-checker keeps rejecting drafts, the graph still terminates and returns
+the best available answer, rather than looping forever.
+
+## Tech stack
+
+- **Orchestration**: [LangGraph](https://langchain-ai.github.io/langgraph/) — explicit state graph with conditional routing, not a linear chain
+- **Search**: [Tavily](https://tavily.com) — API built for LLM agents (structured results, no scraping fragility)
+- **Serving**: FastAPI
+- **UI**: Streamlit (thin client, calls the FastAPI backend over HTTP)
+- **Observability**: [Langfuse](https://langfuse.com) — per-agent-step tracing
+- **Evaluation**: [Ragas](https://github.com/explodinggradients/ragas) — faithfulness & answer relevancy scoring
+- **Environment**: [uv](https://docs.astral.sh/uv/) — reproducible dependency management
+- **CI/CD**: GitHub Actions (tests + Docker build on every push)
+
+## Project structure
+
 ```
-User question
-     │
-     ▼
-┌────────────┐     ┌──────────┐     ┌──────────────┐     ┌────────────┐
-│ Researcher │ ──▶ │ Drafter  │ ──▶ │ Fact-checker │ ──▶ │ Summarizer │ ──▶ Final answer
-│ (web search)│    │ (gpt-4o- │     │ (gpt-4o-mini)│     │ (gpt-4o)   │
-└────────────┘     │  mini)   │     └──────┬───────┘     └────────────┘
-                    └──────────┘            │
-                         ▲                  │ FAIL (retry once)
-                         └──────────────────┘
+app/
+  agents/
+    state.py       # shared state schema passed between agents
+    tools.py       # Tavily web search tool
+    graph.py        # LangGraph orchestration — the core of the pipeline
+  config.py        # env-based settings
+  tracing.py       # Langfuse integration
+  eval.py           # Ragas evaluation script
+  main.py           # FastAPI app
+streamlit_app.py    # UI — calls the FastAPI backend, no duplicated logic
+tests/               # unit + API tests (mocked, no API key required)
+Dockerfile           # uv-based container build
+.github/workflows/ci.yml
+context.md           # design rationale + interview Q&A
 ```
 
-- **Researcher**: pulls live web search results via DuckDuckGo.
-- **Drafter**: writes an answer grounded only in those results (cheap model).
-- **Fact-checker**: checks the draft for unsupported claims; can send it back
-  for one revision (bounded loop, so it always terminates).
-- **Summarizer**: polishes the final answer and adds citations, escalating to
-  a stronger model only for this last step (cost-aware routing).
+## Running it locally
 
-Every request is wrapped in a Langfuse trace so each agent's input/output,
-latency, and cost is inspectable per run.
-
----
-
-## Step-by-step setup (uv)
-
-All commands below were actually run against this exact codebase to confirm
-they work — expected output is included so you know what a correct run
-looks like.
-
-### 0. Prerequisite: install uv (skip if already installed)
+Requires an [OpenAI API key](https://platform.openai.com/api-keys) and a
+free [Tavily API key](https://tavily.com).
 
 ```bash
+# 1. Install uv, if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
-```
 
-Windows (PowerShell):
-```powershell
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Verify:
-```bash
-uv --version
-```
-**Expected output:**
-```
-uv 0.11.7 (x86_64-unknown-linux-gnu)
-```
-(exact version string may differ — any recent uv version is fine)
-
-### 1. Open the project folder in Antigravity / your IDE
-
-Unzip `multi-agent-research-assistant.zip` and open that folder as the
-workspace root. `pyproject.toml` at the root is what makes it a recognizable
-Python project.
-
-### 2. Create the virtual environment
-
-```bash
-uv venv
-```
-**Expected output:**
-```
-Using CPython 3.12.3 interpreter at: /usr/bin/python3
-Creating virtual environment at: .venv
-```
-This creates `.venv/` in the project folder. You do **not** need to manually
-activate it for the commands below — `uv run` handles that automatically.
-(If you want to activate it in your terminal anyway: `source .venv/bin/activate`
-on Mac/Linux, `.venv\Scripts\activate` on Windows.)
-
-### 3. Install dependencies
-
-```bash
+# 2. Install dependencies
 uv sync
-```
-**Expected output (abridged):**
-```
-Resolved 90 packages in 1.2s
-Prepared 90 packages in ...
-Installed 90 packages in ...
- + fastapi==0.115.6
- + langchain==0.3.14
- + langgraph==0.2.60
- + langfuse==2.57.0
- + ragas==0.2.10
- + uvicorn==0.34.0
- ... (plus their sub-dependencies)
-```
-This reads `pyproject.toml` + `uv.lock` and installs the exact pinned
-versions into `.venv/` — no separate `pip install -r requirements.txt` step
-needed, and no "works on my machine" drift since `uv.lock` pins every
-transitive dependency too.
 
-### 4. Set your environment variables
-
-```bash
+# 3. Configure environment
 cp .env.example .env
-```
-Then open `.env` and set at minimum:
-```
-OPENAI_API_KEY=sk-your-real-key
-```
-Langfuse keys are optional — if left blank, tracing silently no-ops (see
-`app/tracing.py`), so the app still runs without a Langfuse account.
+# then edit .env: set OPENAI_API_KEY and TAVILY_API_KEY
 
-### 5. Run the tests (no API key required)
-
-```bash
+# 4. Run the tests (no API key needed — LLM calls are mocked)
 uv run pytest tests/ -v
-```
-**Expected output:**
-```
-collecting ... collected 6 items
 
-tests/test_api.py::test_health PASSED                                    [ 16%]
-tests/test_api.py::test_research_rejects_short_question PASSED           [ 33%]
-tests/test_graph.py::test_route_after_fact_check_passes_goes_to_summarizer PASSED [ 50%]
-tests/test_graph.py::test_route_after_fact_check_fails_retries_drafter PASSED [ 66%]
-tests/test_graph.py::test_route_after_fact_check_stops_at_max_iterations PASSED [ 83%]
-tests/test_graph.py::test_researcher_node_extracts_sources PASSED        [100%]
-
-============================== 6 passed in 1.81s ===============================
-```
-These tests mock the LLM calls entirely, which is why they pass without an
-`OPENAI_API_KEY` set — that's intentional (see "lazy LLM initialization" in
-`context.md`).
-
-### 6. Run the server locally
-
-```bash
+# 5. Start the backend
 uv run uvicorn app.main:app --reload
-```
-**Expected output:**
-```
-INFO:     Will watch for changes in these directories: ['.../multi-agent-research-assistant']
-INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process
-INFO:     Started server process
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
+
+# 6. In a second terminal, start the UI
+uv run streamlit run streamlit_app.py
 ```
 
-### 7. Verify it's alive
+Open `http://localhost:8501` for the UI, or `http://localhost:8000/docs`
+for the raw API (Swagger).
 
-In a second terminal:
-```bash
-curl http://localhost:8000/health
-```
-**Expected output:**
-```json
-{"status":"ok"}
-```
-
-Interactive API docs (open in browser): `http://localhost:8000/docs`
-
-### 8. Call the actual research endpoint (requires a valid OPENAI_API_KEY)
+### Optional: tracing & evaluation
 
 ```bash
-curl -X POST http://localhost:8000/research \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What are the health effects of intermittent fasting?"}'
-```
-**Expected output shape** (content will vary by run):
-```json
-{
-  "question": "What are the health effects of intermittent fasting?",
-  "final_answer": "...polished answer with a Sources section...",
-  "sources": ["https://...", "https://..."],
-  "fact_check_passed": true,
-  "iterations": 1,
-  "model_used": "gpt-4o",
-  "latency_seconds": 8.42
-}
-```
-`iterations` will be `2` if the fact-checker sent the draft back once before
-passing it.
+# Enable Langfuse tracing: add LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY
+# to .env and set ENABLE_TRACING=true, then just run requests as normal —
+# traces appear in your Langfuse project automatically.
 
----
+# Run the Ragas evaluation suite
+uv run python -m app.eval
+```
 
-## Run with Docker (uv-based image)
+### Docker
 
 ```bash
 docker build -t research-assistant .
 docker run -p 8000:8000 --env-file .env research-assistant
 ```
-The Dockerfile installs `uv` inside the image and runs `uv sync --frozen`
-against the committed `uv.lock`, so the container gets the exact same
-dependency versions as your local `.venv` — no separate `requirements.txt`
-to keep in sync.
 
-## Run evaluation
+## Design notes & known limitations
 
-```bash
-uv run python -m app.eval
-```
-Produces `eval_results.csv` with faithfulness and answer-relevancy scores
-per question — run this after any prompt or model change to catch quality
-regressions before they ship. Requires a valid `OPENAI_API_KEY`.
+- **Bounded retry, not guaranteed correctness**: the fact-checker/drafter
+  loop is capped at `MAX_AGENT_ITERATIONS`. This guarantees the graph
+  terminates, but doesn't guarantee the final answer passed fact-checking
+  — worth knowing if you're evaluating this for a use case that can't
+  tolerate that.
+- **Search dependency**: research quality is bounded by what Tavily
+  returns. A production version would want retries/circuit-breaking around
+  the search call and a clearer failure signal when search comes back thin,
+  rather than letting a downstream agent quietly write around it.
+- **No caching**: identical or near-identical questions re-run the full
+  pipeline. Worth adding for a high-traffic deployment.
 
-## Project layout
+See [`context.md`](context.md) for the full design rationale, the bugs hit
+while building this (credential-loading pitfalls, a search API swap after
+hitting rate limits, etc.), and interview-style Q&A about the project.
 
-```
-pyproject.toml    # dependencies (uv-managed)
-uv.lock            # pinned, reproducible dependency versions
-app/
-  agents/
-    state.py       # shared state schema passed between agents
-    tools.py       # web search tool
-    graph.py       # LangGraph orchestration (the core of the project)
-  config.py        # env-based settings
-  tracing.py       # Langfuse integration
-  eval.py          # Ragas evaluation script
-  main.py          # FastAPI app
-tests/             # unit + API tests (no API key required)
-Dockerfile         # uv-based container build
-.github/workflows/ci.yml   # uv-based CI
-context.md         # why/what/how + interview prep
-```
+## License
+
+MIT

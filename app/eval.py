@@ -31,8 +31,6 @@ def build_eval_dataset(questions: list[str]) -> Dataset:
         result = run_research(q)
         rows["question"].append(q)
         rows["answer"].append(result.get("final_answer", ""))
-        # Ragas expects contexts as a list of chunks; we treat the raw
-        # search results blob as a single context chunk for simplicity.
         rows["contexts"].append([result.get("search_results", "")])
 
     return Dataset.from_dict(rows)
