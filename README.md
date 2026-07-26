@@ -149,10 +149,3 @@ docker run -p 8000:8000 --env-file .env research-assistant
 - **No caching**: identical or near-identical questions re-run the full
   pipeline. Worth adding for a high-traffic deployment.
 
-See [`context.md`](context.md) for the full design rationale, the bugs hit
-while building this (credential-loading pitfalls, a search API swap after
-hitting rate limits, etc.), and interview-style Q&A about the project.
-
-## License
-
-MIT
