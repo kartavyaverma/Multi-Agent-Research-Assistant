@@ -1,10 +1,3 @@
-"""
-Centralized configuration. Reads from environment variables / .env file.
-Keeping all config in one place makes the ops story (which model, which
-tracing project, which cost limits) auditable at a glance -- this is a
-small but real LLMOps habit worth mentioning in an interview.
-"""
-
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
