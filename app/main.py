@@ -1,8 +1,3 @@
-"""
-FastAPI entrypoint. Exposes the multi-agent research assistant as an HTTP
-API, with tracing wrapped around every request.
-"""
-
 import time
 
 from fastapi import FastAPI, HTTPException
