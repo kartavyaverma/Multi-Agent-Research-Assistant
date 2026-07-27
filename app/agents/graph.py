@@ -1,21 +1,3 @@
-"""
-Multi-agent research assistant, orchestrated with LangGraph.
-
-Pipeline:
-    researcher -> drafter -> fact_checker -> (loop back to drafter if failed,
-                                               else) -> summarizer -> END
-
-Design decisions worth explaining in an interview:
-1. Cost-aware model routing: researcher/fact-checker use a cheap/fast model
-   (gpt-4o-mini). Only the final summarizer escalates to a stronger model,
-   and only once. This mirrors how production systems control LLM spend.
-2. Explicit state object (ResearchState) instead of free-form chat history:
-   makes every agent's input/output inspectable and testable in isolation.
-3. A bounded self-correction loop: fact_checker can send the draft back to
-   the drafter once, but `iterations` caps it so a disagreeing pair of
-   agents can't loop forever (an easy production bug in agentic systems).
-"""
-
 import re
 from typing import Literal
 
