@@ -1,19 +1,3 @@
-"""
-Minimal Streamlit UI for the Multi-Agent Research Assistant.
-
-This is a thin client -- it does NOT talk to LangGraph, OpenAI, or Tavily
-directly. It calls the already-running FastAPI backend (`app/main.py`) over
-HTTP, same as curl or the Swagger docs page would. This means:
-
-- No duplicate business logic to maintain in two places.
-- Tracing keeps working automatically: every request still goes through
-  `/research`, which is already wrapped in a Langfuse trace on the backend.
-  The UI doesn't need to know anything about tracing.
-
-Run with: uv run streamlit run streamlit_app.py
-(Requires the FastAPI backend to already be running separately, see README.)
-"""
-
 import time
 
 import requests
