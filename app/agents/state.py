@@ -1,9 +1,3 @@
-"""
-Shared state that flows through the LangGraph graph. Every node reads from
-and writes to this single object, which is what makes the handoff between
-agents explicit and inspectable (and traceable in Langfuse).
-"""
-
 from typing import TypedDict, List, Optional
 
 
