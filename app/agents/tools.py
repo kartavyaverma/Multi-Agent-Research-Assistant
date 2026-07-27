@@ -1,14 +1,3 @@
-"""
-Tools available to the agent graph. Kept separate from agent logic so
-tools can be unit-tested / swapped independently without touching the
-graph definition.
-
-Uses Tavily instead of scraping DuckDuckGo: Tavily is a real API built
-for LLM agents (structured JSON results, no HTML scraping, no
-IP-based rate-limiting/blocking like a scraper hits), and has a free tier
-generous enough for development and demos.
-"""
-
 from langchain_core.tools import tool
 from tavily import TavilyClient
 
