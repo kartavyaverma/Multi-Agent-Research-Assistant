@@ -1,12 +1,3 @@
-"""
-LLMOps observability layer: wraps every agent run in a Langfuse trace so
-each node's input/output, latency, and token cost is visible per-request.
-
-This is the piece that separates "I called an LLM API" from "I can operate
-an LLM system in production" -- in an interview, this is usually the file
-worth walking through in detail.
-"""
-
 from contextlib import contextmanager
 
 from langfuse import Langfuse
