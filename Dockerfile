@@ -1,6 +1,5 @@
 FROM python:3.11-slim
 
-# Install uv (fast Python package manager) into the image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /code
