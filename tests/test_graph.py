@@ -1,8 +1,3 @@
-"""
-Unit tests. Node-level functions are tested independently of the LLM by
-monkeypatching the model calls, so tests run fast and don't need an API key.
-"""
-
 from unittest.mock import patch, MagicMock
 
 from app.agents.state import ResearchState
