@@ -1,16 +1,3 @@
-"""
-Evaluation script using Ragas to score the agent pipeline on faithfulness
-(is the answer grounded in the retrieved search results?) and answer
-relevancy (does it actually address the question?).
-
-This is what turns "I built a RAG/agent system" into "I built a RAG/agent
-system and can prove its quality" -- run this after any prompt or model
-change to catch regressions before they reach users.
-
-Usage:
-    python -m app.eval
-"""
-
 from datasets import Dataset
 from ragas import evaluate
 from ragas.metrics import faithfulness, answer_relevancy
