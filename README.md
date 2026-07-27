@@ -134,18 +134,3 @@ uv run python -m app.eval
 docker build -t research-assistant .
 docker run -p 8000:8000 --env-file .env research-assistant
 ```
-
-## Design notes & known limitations
-
-- **Bounded retry, not guaranteed correctness**: the fact-checker/drafter
-  loop is capped at `MAX_AGENT_ITERATIONS`. This guarantees the graph
-  terminates, but doesn't guarantee the final answer passed fact-checking
-  — worth knowing if you're evaluating this for a use case that can't
-  tolerate that.
-- **Search dependency**: research quality is bounded by what Tavily
-  returns. A production version would want retries/circuit-breaking around
-  the search call and a clearer failure signal when search comes back thin,
-  rather than letting a downstream agent quietly write around it.
-- **No caching**: identical or near-identical questions re-run the full
-  pipeline. Worth adding for a high-traffic deployment.
-
